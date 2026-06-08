@@ -1,0 +1,16 @@
+# Swift / SwiftPM
+.build/
+.swiftpm/
+Package.resolved
+
+# Xcode
+DerivedData/
+*.xcuserstate
+xcuserdata/
+*.xcscmblueprint
+
+# Generated app bundle (produced by make_app.sh)
+*.app
+
+# macOS
+.DS_Store
