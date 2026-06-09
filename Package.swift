@@ -2,14 +2,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "ImageToSequence",
+    name: "FrameGrab",
     platforms: [
         .macOS(.v13)
     ],
     targets: [
         .executableTarget(
-            name: "ImageToSequence",
-            path: "Sources/ImageToSequence"
+            name: "FrameGrab",
+            path: "Sources/FrameGrab"
         )
     ]
 )

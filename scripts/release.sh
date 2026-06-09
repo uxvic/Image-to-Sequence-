@@ -15,13 +15,21 @@ cd "$(dirname "$0")/.."          # repo root
 ROOT="$PWD"
 
 REPO="uxvic/Image-to-Sequence-"
-SCHEME="ImageToSequence"
-APP_NAME="ImageToSequence"
-PROJECT="ImageToSequence.xcodeproj"
+SCHEME="FrameGrab"
+APP_NAME="FrameGrab"
+PROJECT="FrameGrab.xcodeproj"
 
 OUT="$ROOT/build/release"
 ZIP_DIR="$ROOT/build/appcast-src"
 APP_PATH="$ROOT/build/dd/Build/Products/Release/$APP_NAME.app"
+
+# --- 0. App icon ------------------------------------------------------------
+# Generate the icon PNGs into the asset catalog if they're missing, so every
+# release ships with an icon. Drop a Branding/icon-1024.png to use your own art.
+if [[ ! -f "Assets.xcassets/AppIcon.appiconset/icon_512x512@2x.png" ]]; then
+  echo "▶︎ Generating app icon…"
+  swift scripts/make_icon.swift
+fi
 
 # --- 1. Generate the Xcode project ------------------------------------------
 command -v xcodegen >/dev/null || { echo "✗ xcodegen not found — brew install xcodegen"; exit 1; }

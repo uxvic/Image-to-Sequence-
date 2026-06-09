@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>Image to Sequence</string>
+    <string>FrameGrab</string>
     <key>CFBundleDisplayName</key>
-    <string>Image to Sequence</string>
+    <string>FrameGrab</string>
     <key>CFBundleExecutable</key>
     <string>$(EXECUTABLE_NAME)</string>
     <key>CFBundleIdentifier</key>
@@ -26,6 +26,10 @@
     <string>NSApplication</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.video</string>
+    <key>CFBundleIconName</key>
+    <string>AppIcon</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>© 2026 Victor Adedini</string>
 
     <!-- ===== Sparkle auto-update ===== -->
     <!-- The appcast lives as an asset on your latest GitHub release. -->

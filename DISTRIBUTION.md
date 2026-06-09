@@ -1,4 +1,4 @@
-# Distributing Image to Sequence (DMG + Sparkle auto-update)
+# Distributing FrameGrab (DMG + Sparkle auto-update)
 
 This sets up a **free, unsigned** distribution with **automatic updates** via
 [Sparkle](https://sparkle-project.org). You publish releases to **GitHub
@@ -16,6 +16,7 @@ Releases**; installed copies (yours and your friend's) update themselves.
 **1. Install the tooling**
 ```bash
 brew install xcodegen          # generates the Xcode project from project.yml
+brew install create-dmg        # optional: styled DMG window (falls back to plain)
 brew install gh                # optional: auto-publishes GitHub releases
 ```
 
@@ -49,11 +50,14 @@ https://github.com/uxvic/Image-to-Sequence-/releases/latest/download/appcast.xml
 ```
 Change `uxvic/Image-to-Sequence-` only if your repo path differs.
 
-**6. Generate the project and test once**
+**6. Generate the icon, the project, and test once**
 ```bash
+swift scripts/make_icon.swift   # writes the app-icon PNGs (once)
 xcodegen generate
-open ImageToSequence.xcodeproj      # then press ⌘R to run
+open FrameGrab.xcodeproj         # then press ⌘R to run
 ```
+To use your **own** icon instead of the built-in one, drop a 1024×1024 PNG at
+`Branding/icon-1024.png` and re-run `swift scripts/make_icon.swift`.
 
 ---
 
@@ -72,20 +76,20 @@ SPARKLE_BIN=/path/to/Sparkle/bin ./scripts/release.sh
 ```
 This will:
 - regenerate the project and build a Release `.app`,
-- make `ImageToSequence.dmg` (human download) + `ImageToSequence.zip` (Sparkle),
+- make `FrameGrab.dmg` (human download) + `FrameGrab.zip` (Sparkle),
 - generate and **sign** `appcast.xml`,
 - create/update the GitHub release `vX.Y` with those three files (if `gh` is
   installed; otherwise it prints manual upload steps).
 
 That's it — anyone running the app will be offered the update automatically
-(or via **Image to Sequence ▸ Check for Updates…**).
+(or via **FrameGrab ▸ Check for Updates…**).
 
 ---
 
 ## Your friend's first install
 
-1. Open the GitHub release page and download **`ImageToSequence.dmg`**.
-2. Open the DMG, drag **Image to Sequence** to **Applications**.
+1. Open the GitHub release page and download **`FrameGrab.dmg`**.
+2. Open the DMG, drag **FrameGrab** to **Applications**.
 3. First launch only: **right-click the app → Open → Open** (or, if macOS still
    blocks it, **System Settings ▸ Privacy & Security ▸ Open Anyway**). This is
    the one-time unsigned-app bypass.
@@ -97,7 +101,7 @@ That's it — anyone running the app will be offered the update automatically
 
 | File | Role |
 |------|------|
-| `project.yml` | XcodeGen spec → `ImageToSequence.xcodeproj` (embeds + signs Sparkle) |
+| `project.yml` | XcodeGen spec → `FrameGrab.xcodeproj` (embeds + signs Sparkle) |
 | `Support/Info.plist` | App metadata + Sparkle keys (`SUFeedURL`, `SUPublicEDKey`) |
 | `Sources/.../Updater.swift` | Sparkle "Check for Updates" UI (compiled only with Sparkle) |
 | `scripts/make_dmg.sh` | App → drag-to-Applications DMG |
@@ -111,7 +115,7 @@ The plain `Package.swift` still works for quick development
 - **`generate_appcast not found`** → pass `SPARKLE_BIN=/path/to/Sparkle/bin`.
 - **Updates not detected** → confirm you bumped `CURRENT_PROJECT_VERSION`, that
   the release is marked *latest* (not pre-release), and that `appcast.xml` +
-  `ImageToSequence.zip` are both attached to the release.
+  `FrameGrab.zip` are both attached to the release.
 - **Sparkle framework didn't embed** (crash on launch about `Sparkle`) → in
   Xcode, select the target ▸ *General* ▸ *Frameworks, Libraries, and Embedded
   Content* ▸ set **Sparkle** to **Embed & Sign**, then rebuild.

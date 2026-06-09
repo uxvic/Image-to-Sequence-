@@ -20,5 +20,8 @@ build/
 *.dmg
 appcast.xml
 
+# App-icon PNGs are generated on the Mac by scripts/make_icon.swift
+Assets.xcassets/AppIcon.appiconset/*.png
+
 # macOS
 .DS_Store

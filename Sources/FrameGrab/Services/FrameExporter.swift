@@ -75,7 +75,7 @@ enum FrameExporter {
             // folder reads nicely once unzipped.
             let stem = request.destination.deletingPathExtension().lastPathComponent
             writeDir = fileManager.temporaryDirectory
-                .appendingPathComponent("ImageToSequence-\(UUID().uuidString)", isDirectory: true)
+                .appendingPathComponent("FrameGrab-\(UUID().uuidString)", isDirectory: true)
                 .appendingPathComponent(stem, isDirectory: true)
         } else {
             writeDir = request.destination

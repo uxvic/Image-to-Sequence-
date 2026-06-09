@@ -5,7 +5,7 @@ import Sparkle
 #endif
 
 @main
-struct ImageToSequenceApp: App {
+struct FrameGrabApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var model = EditorModel()
 
@@ -19,7 +19,7 @@ struct ImageToSequenceApp: App {
     #endif
 
     var body: some Scene {
-        WindowGroup("Image to Sequence") {
+        WindowGroup("FrameGrab") {
             ContentView()
                 .environmentObject(model)
                 .frame(minWidth: 1000, minHeight: 660)
@@ -37,6 +37,14 @@ struct ImageToSequenceApp: App {
                 CheckForUpdatesView(updater: updaterController.updater)
             }
             #endif
+            // Help ▸ FrameGrab on GitHub
+            CommandGroup(replacing: .help) {
+                Button("FrameGrab on GitHub") {
+                    if let url = URL(string: "https://github.com/uxvic/Image-to-Sequence-") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+            }
         }
     }
 }

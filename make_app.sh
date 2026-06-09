@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 #
-# Builds a distributable, double-clickable ImageToSequence.app from the SwiftPM
-# release binary. Requires the Swift toolchain that ships with Xcode / the
-# Command Line Tools. Run on macOS:
+# Builds a quick, double-clickable FrameGrab.app from the SwiftPM release binary
+# (no auto-update; use scripts/release.sh for the full Sparkle build). Requires
+# the Swift toolchain that ships with Xcode / the Command Line Tools. On macOS:
 #
 #   ./make_app.sh
 #
 set -euo pipefail
 
-APP_NAME="ImageToSequence"
-DISPLAY_NAME="Image to Sequence"
-BUNDLE_ID="com.uxvic.imagetosequence"
+APP_NAME="FrameGrab"
+DISPLAY_NAME="FrameGrab"
+BUNDLE_ID="com.uxvic.framegrab"
 VERSION="1.0"
 MIN_OS="13.0"
 
