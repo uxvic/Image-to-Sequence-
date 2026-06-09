@@ -1,0 +1,66 @@
+# XcodeGen project spec — the source of truth for the Xcode project.
+# Regenerate the .xcodeproj with:  xcodegen generate
+#
+# Why an Xcode project (vs. the plain Package.swift)? Sparkle's auto-update
+# framework must be embedded into the .app and code-signed via build phases,
+# which Xcode does automatically for SPM dependencies. The Package.swift still
+# works for quick `swift run` development (without auto-update) — the Sparkle
+# code is guarded by `#if canImport(Sparkle)`.
+
+name: ImageToSequence
+
+options:
+  bundleIdPrefix: com.uxvic
+  deploymentTarget:
+    macOS: "13.0"
+  createIntermediateGroups: true
+
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: "2.6.0"
+
+settings:
+  base:
+    # Swift 5 language mode (matches Package.swift's swift-tools 5.9): keeps the
+    # build clean on newer toolchains by not enabling strict concurrency.
+    SWIFT_VERSION: "5.0"
+    # Ad-hoc signing: the app runs on any Mac (required on Apple Silicon) but is
+    # not notarized, so the first launch needs a manual Gatekeeper bypass.
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: "-"
+    DEVELOPMENT_TEAM: ""
+    ENABLE_HARDENED_RUNTIME: NO
+
+targets:
+  ImageToSequence:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/ImageToSequence
+    dependencies:
+      - package: Sparkle
+    settings:
+      base:
+        PRODUCT_NAME: ImageToSequence
+        PRODUCT_BUNDLE_IDENTIFIER: com.uxvic.imagetosequence
+        # Bump both of these for every release you publish.
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        INFOPLIST_FILE: Support/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        COMBINE_HIDPI_IMAGES: YES
+
+schemes:
+  ImageToSequence:
+    build:
+      targets:
+        ImageToSequence: all
+    run:
+      config: Debug
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

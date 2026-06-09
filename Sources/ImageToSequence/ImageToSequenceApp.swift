@@ -1,10 +1,22 @@
 import SwiftUI
 import AppKit
+#if canImport(Sparkle)
+import Sparkle
+#endif
 
 @main
 struct ImageToSequenceApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var model = EditorModel()
+
+    #if canImport(Sparkle)
+    // Starts the updater and schedules background checks (per Info.plist keys).
+    private let updaterController = SPUStandardUpdaterController(
+        startingUpdater: true,
+        updaterDelegate: nil,
+        userDriverDelegate: nil
+    )
+    #endif
 
     var body: some Scene {
         WindowGroup("Image to Sequence") {
@@ -19,6 +31,12 @@ struct ImageToSequenceApp: App {
                 Button("Open Video…") { model.presentOpenPanel() }
                     .keyboardShortcut("o", modifiers: .command)
             }
+            #if canImport(Sparkle)
+            // Adds "Check for Updates…" under the app menu.
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesView(updater: updaterController.updater)
+            }
+            #endif
         }
     }
 }

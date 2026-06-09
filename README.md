@@ -46,15 +46,31 @@ Everything runs **100% locally** — no video ever leaves your Mac.
 swift run
 ```
 
-### Build a double-clickable app
+### Build a quick local app (no auto-update)
 
 ```bash
 ./make_app.sh
 ```
 
-This produces `ImageToSequence.app`. Drag it to `/Applications`. Because the
-build is unsigned/ad-hoc, the **first** launch needs a right-click → **Open** to
-get past Gatekeeper (after that, double-click works normally).
+This produces a `ImageToSequence.app` straight from the Swift Package — handy for
+running it yourself. Because the build is unsigned/ad-hoc, the **first** launch
+needs a right-click → **Open** to get past Gatekeeper (after that, double-click
+works normally). This build does **not** include auto-update.
+
+### Share it + auto-update (DMG + Sparkle)
+
+To hand the app to someone else and have it update itself, build through the
+Xcode project (which embeds the [Sparkle](https://sparkle-project.org) updater)
+and publish to GitHub Releases:
+
+```bash
+brew install xcodegen
+xcodegen generate
+SPARKLE_BIN=/path/to/Sparkle/bin ./scripts/release.sh
+```
+
+Full step-by-step (signing keys, first-time setup, publishing, and your friend's
+one-time Gatekeeper bypass) is in **[DISTRIBUTION.md](DISTRIBUTION.md)**.
 
 ## How to use
 
@@ -80,10 +96,16 @@ Frames are named `frame_0001.<ext>`, `frame_0002.<ext>`, … in order.
 ## Project layout
 
 ```
-Package.swift                      Swift Package (executable target)
-make_app.sh                        Package the release binary into a .app
+Package.swift                      Swift Package — quick `swift run` dev build
+project.yml                        XcodeGen spec — Xcode app w/ Sparkle (releases)
+Support/Info.plist                 App metadata + Sparkle auto-update keys
+make_app.sh                        Quick local .app (no auto-update)
+scripts/make_dmg.sh                App → drag-to-Applications DMG
+scripts/release.sh                 Build + DMG + signed appcast → GitHub release
+DISTRIBUTION.md                    Full DMG + auto-update setup guide
 Sources/ImageToSequence/
-  ImageToSequenceApp.swift         App entry + menu commands
+  ImageToSequenceApp.swift         App entry + menu commands (+ updater)
+  Updater.swift                    Sparkle "Check for Updates" (compiled w/ Sparkle)
   EditorModel.swift                State: player, selection, settings, export
   Models/ExportSettings.swift      Frame/format/scale/output options
   Services/VideoLoader.swift       Async metadata + timeline thumbnails
