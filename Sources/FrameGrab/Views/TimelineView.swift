@@ -93,6 +93,10 @@ private struct TimelineTrack: View {
                 .offset(x: startX)
                 .allowsHitTesting(false)
 
+            // Sample ticks: exactly where each exported frame is taken from.
+            FrameTicksView()
+                .allowsHitTesting(false)
+
             // Playhead.
             Rectangle()
                 .fill(Color.white)
@@ -140,6 +144,42 @@ private struct TimelineTrack: View {
                 }
                 model.seek(to: t)
             }
+    }
+}
+
+/// Draws a tick at every timestamp the exporter will sample, so the spacing of
+/// the frame set is visible at a glance (dense for high FPS, sparse for a low
+/// count). Excluded frames are drawn in red.
+private struct FrameTicksView: View {
+    @EnvironmentObject var model: EditorModel
+
+    /// Beyond this the ticks merge into a smear — subsample so drawing stays cheap.
+    private let maxTicks = 400
+
+    var body: some View {
+        Canvas { context, size in
+            guard model.duration > 0, !model.plannedTimes.isEmpty else { return }
+
+            let bandHeight: CGFloat = 14
+            let band = CGRect(x: 0, y: size.height - bandHeight, width: size.width, height: bandHeight)
+            context.fill(Path(band), with: .color(.black.opacity(0.55)))
+
+            let count = model.plannedTimes.count
+            let step = max(1, count / maxTicks)
+
+            for index in Swift.stride(from: 0, to: count, by: step) {
+                let x = CGFloat(model.plannedTimes[index] / model.duration) * size.width
+                let excluded = model.excludedFrameIDs.contains(index)
+                var path = Path()
+                path.move(to: CGPoint(x: x, y: size.height - 2))
+                path.addLine(to: CGPoint(x: x, y: size.height - bandHeight + 2))
+                context.stroke(
+                    path,
+                    with: .color(excluded ? Color.red.opacity(0.9) : Color.white.opacity(0.95)),
+                    lineWidth: 1.5
+                )
+            }
+        }
     }
 }
 

@@ -35,12 +35,25 @@ final class EditorModel: ObservableObject {
     @Published private(set) var isExporting = false
     @Published private(set) var exportProgress: Double = 0
 
+    // Frame preview
+    /// Exact timestamps the exporter will sample, before exclusions. Recomputed
+    /// whenever the selection or the frame settings change.
+    @Published private(set) var plannedTimes: [Double] = []
+    @Published private(set) var previewFrames: [PreviewFrame] = []
+    @Published private(set) var excludedFrameIDs: Set<Int> = []
+    @Published private(set) var isPreviewVisible = false
+    @Published private(set) var isGeneratingPreview = false
+
+    /// Rendering hundreds of thumbnails is pointless (and slow) — cap the grid.
+    static let maxPreviewFrames = 60
+
     @Published private(set) var isLoading = false
     @Published var errorMessage: String?
 
     private var timeObserver: Any?
     private var cancellables = Set<AnyCancellable>()
     private var exportTask: Task<Void, Never>?
+    private var previewTask: Task<Void, Never>?
     /// Identifies the current load so stale async work (e.g. thumbnails from a
     /// previously-opened video) can be discarded.
     private var loadToken = UUID()
@@ -54,9 +67,18 @@ final class EditorModel: ObservableObject {
                 self?.isPlaying = (status == .playing)
             }
             .store(in: &cancellables)
+
+        // Keep the planned frame list in sync with the selection + settings.
+        Publishers.CombineLatest3($selectionStart, $selectionEnd, $settings)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _, _, _ in
+                self?.recomputePlannedTimes()
+            }
+            .store(in: &cancellables)
     }
 
     deinit {
+        previewTask?.cancel()
         if let timeObserver {
             player.removeTimeObserver(timeObserver)
         }
@@ -66,14 +88,121 @@ final class EditorModel: ObservableObject {
 
     var selectionDuration: Double { max(0, selectionEnd - selectionStart) }
 
-    /// Cheap estimate that mirrors `FrameExporter.frameTimes(...).count` without
-    /// building the array on every UI update.
-    var estimatedFrameCount: Int {
-        switch settings.mode {
-        case .count:
-            return max(1, settings.frameCount)
-        case .fps:
-            return max(1, Int(floor(selectionDuration * max(0.01, settings.fps))) + 1)
+    /// How many frames the current settings produce, before exclusions.
+    var plannedFrameCount: Int { plannedTimes.count }
+
+    /// How many frames will actually be written (exclusions applied).
+    var includedFrameCount: Int { max(0, plannedTimes.count - excludedFrameIDs.count) }
+
+    /// Timestamps that will actually be exported, in order.
+    var exportTimes: [Double] {
+        guard !excludedFrameIDs.isEmpty else { return plannedTimes }
+        return plannedTimes.enumerated()
+            .filter { !excludedFrameIDs.contains($0.offset) }
+            .map(\.element)
+    }
+
+    /// True when the planned set is larger than the preview grid can show.
+    var previewIsTruncated: Bool { plannedTimes.count > Self.maxPreviewFrames }
+
+    // MARK: - Frame preview
+
+    /// Recomputes the planned frame times using the *same* function the exporter
+    /// uses, so the preview and the export can never disagree.
+    private func recomputePlannedTimes() {
+        let times: [Double] = duration > 0
+            ? FrameExporter.frameTimes(start: selectionStart, end: selectionEnd, settings: settings)
+            : []
+
+        // Settings that don't affect timing (format, scale, output) shouldn't
+        // discard the user's hand-picked exclusions.
+        guard times != plannedTimes else { return }
+
+        plannedTimes = times
+        excludedFrameIDs.removeAll()   // indices no longer refer to the same frames
+        schedulePreviewRefresh()
+    }
+
+    func togglePreview() {
+        isPreviewVisible.toggle()
+        if isPreviewVisible {
+            schedulePreviewRefresh()
+        } else {
+            previewTask?.cancel()
+            previewTask = nil
+            previewFrames = []
+            isGeneratingPreview = false
+        }
+    }
+
+    func toggleExclusion(_ id: Int) {
+        if excludedFrameIDs.contains(id) {
+            excludedFrameIDs.remove(id)
+        } else {
+            excludedFrameIDs.insert(id)
+        }
+    }
+
+    func includeAllFrames() { excludedFrameIDs.removeAll() }
+
+    /// Rebuilds the preview grid: seeds placeholder tiles immediately (so the
+    /// layout and timestamps appear instantly), then renders thumbnails in the
+    /// background after a short debounce.
+    private func schedulePreviewRefresh() {
+        previewTask?.cancel()
+        previewTask = nil
+
+        guard isPreviewVisible else {
+            previewFrames = []
+            isGeneratingPreview = false
+            return
+        }
+
+        let times = Array(plannedTimes.prefix(Self.maxPreviewFrames))
+        previewFrames = times.enumerated().map { PreviewFrame(id: $0.offset, time: $0.element, image: nil) }
+
+        guard let asset, !times.isEmpty else {
+            isGeneratingPreview = false
+            return
+        }
+
+        isGeneratingPreview = true
+        let clipDuration = duration
+        previewTask = Task {
+            // Debounce: dragging a slider shouldn't kick off a render per tick.
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            if Task.isCancelled { return }
+            await self.renderPreview(asset: asset, times: times, clipDuration: clipDuration)
+        }
+    }
+
+    private func renderPreview(asset: AVAsset, times: [Double], clipDuration: Double) async {
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        generator.maximumSize = CGSize(width: 480, height: 480)
+        // Match the exporter's frame accuracy so the preview isn't a near-miss.
+        generator.requestedTimeToleranceBefore = .zero
+        generator.requestedTimeToleranceAfter = .zero
+
+        let maxSeconds = clipDuration > 0 ? clipDuration - (1.0 / 600.0) : .greatestFiniteMagnitude
+
+        for (index, seconds) in times.enumerated() {
+            if Task.isCancelled { break }
+            let clamped = max(0, min(seconds, maxSeconds))
+            let time = CMTime(seconds: clamped, preferredTimescale: 600)
+            guard let result = try? await generator.image(at: time) else { continue }
+            let image = NSImage(cgImage: result.image, size: .zero)
+
+            await MainActor.run {
+                // Drop the result if the plan changed while this was rendering.
+                guard index < self.previewFrames.count,
+                      self.previewFrames[index].time == seconds else { return }
+                self.previewFrames[index].image = image
+            }
+        }
+
+        await MainActor.run {
+            if !Task.isCancelled { self.isGeneratingPreview = false }
         }
     }
 
@@ -131,6 +260,8 @@ final class EditorModel: ObservableObject {
     }
 
     private func apply(meta: VideoLoader.Metadata, url: URL) {
+        previewTask?.cancel()
+        previewTask = nil
         asset = meta.asset
         videoURL = url
         videoSize = meta.displaySize
@@ -139,9 +270,14 @@ final class EditorModel: ObservableObject {
         selectionEnd = meta.duration
         currentTime = 0
         thumbnails = []
+        previewFrames = []
+        excludedFrameIDs = []
+        isGeneratingPreview = false
         isLoading = false
         player.replaceCurrentItem(with: AVPlayerItem(asset: meta.asset))
         player.seek(to: .zero)
+        // `duration` just changed, so the planned frame list must be rebuilt.
+        recomputePlannedTimes()
     }
 
     private func friendlyMessage(for url: URL, error: Error) -> String {
@@ -186,6 +322,13 @@ final class EditorModel: ObservableObject {
     func export() {
         guard let asset, duration > 0, !isExporting else { return }
 
+        // Exactly what the preview showed, minus anything the user excluded.
+        let times = exportTimes
+        guard !times.isEmpty else {
+            errorMessage = "Every frame is excluded — include at least one frame to export."
+            return
+        }
+
         let stem = videoURL?.deletingPathExtension().lastPathComponent ?? "frames"
         let destination: URL
 
@@ -212,8 +355,7 @@ final class EditorModel: ObservableObject {
 
         let request = FrameExporter.Request(
             asset: asset,
-            start: selectionStart,
-            end: selectionEnd,
+            times: times,
             duration: duration,
             sourceSize: videoSize,
             settings: settings,

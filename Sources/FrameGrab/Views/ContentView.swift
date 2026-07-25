@@ -13,8 +13,15 @@ struct ContentView: View {
                     EmptyStateView(isTargeted: isDropTargeted)
                 } else {
                     VStack(spacing: 0) {
-                        PlayerView()
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        // The preview grid takes over the player area so the
+                        // timeline (and its sample ticks) stay visible below.
+                        if model.isPreviewVisible {
+                            FramePreviewView()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        } else {
+                            PlayerView()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
                         TimelineView()
                     }
                 }

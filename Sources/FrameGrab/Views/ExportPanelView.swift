@@ -72,16 +72,39 @@ struct ExportPanelView: View {
     }
 
     private var estimateLabel: some View {
-        let count = model.estimatedFrameCount
-        return VStack(alignment: .leading, spacing: 4) {
-            Text("≈ \(count) image\(count == 1 ? "" : "s")")
+        let planned = model.plannedFrameCount
+        let included = model.includedFrameCount
+        let excluded = planned - included
+
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("\(included) image\(included == 1 ? "" : "s")")
                 .font(.callout.weight(.medium))
                 .foregroundColor(Theme.accent)
-            if count > 20 {
+
+            if excluded > 0 {
+                Text("\(excluded) excluded in preview")
+                    .font(.caption)
+                    .foregroundColor(Theme.textSecondary)
+            }
+
+            if included > 20 {
                 Text("Most LLMs accept ~20 images per message — consider fewer.")
                     .font(.caption)
                     .foregroundColor(Theme.warning)
             }
+
+            Button {
+                model.togglePreview()
+            } label: {
+                HStack {
+                    Image(systemName: model.isPreviewVisible ? "eye.slash" : "square.grid.3x3")
+                    Text(model.isPreviewVisible ? "Hide preview" : "Preview frames")
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .controlSize(.regular)
+            .disabled(model.videoURL == nil || planned == 0)
+            .help("See the exact frames that will be exported, and click any of them to leave it out")
         }
     }
 
@@ -139,6 +162,15 @@ struct ExportPanelView: View {
 
     // MARK: Export action
 
+    private var exportLabel: String {
+        let n = model.includedFrameCount
+        guard n > 0 else { return "Nothing to export" }
+        let noun = n == 1 ? "Image" : "Images"
+        return model.settings.outputMode == .zip
+            ? "Export \(n) \(noun) as ZIP…"
+            : "Export \(n) \(noun)…"
+    }
+
     private var exportSection: some View {
         VStack(spacing: 12) {
             if model.isExporting {
@@ -156,14 +188,14 @@ struct ExportPanelView: View {
                 Button(action: { model.export() }) {
                     HStack {
                         Image(systemName: "square.and.arrow.down")
-                        Text(model.settings.outputMode == .zip ? "Export ZIP…" : "Export Frames…")
+                        Text(exportLabel)
                     }
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.accent)
                 .controlSize(.large)
-                .disabled(model.videoURL == nil)
+                .disabled(model.videoURL == nil || model.includedFrameCount == 0)
             }
         }
     }

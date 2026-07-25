@@ -9,8 +9,10 @@ enum FrameExporter {
 
     struct Request {
         let asset: AVAsset
-        let start: Double            // seconds
-        let end: Double              // seconds
+        /// The exact timestamps to sample, in order. Precomputed by the caller
+        /// (via `frameTimes`) so the on-screen preview and the written files can
+        /// never disagree, and so excluded frames are simply absent here.
+        let times: [Double]
         let duration: Double         // full clip duration, used to clamp the last sample
         let sourceSize: CGSize       // display size, used to avoid upscaling
         let settings: ExportSettings
@@ -62,7 +64,7 @@ enum FrameExporter {
     /// frame is written (on an arbitrary thread — marshal to the main thread in
     /// the handler if updating UI).
     static func export(_ request: Request, progress: @escaping (Double) -> Void) async throws {
-        let times = frameTimes(start: request.start, end: request.end, settings: request.settings)
+        let times = request.times
         guard !times.isEmpty else { throw ExportError.noFrames }
 
         let isZip = request.settings.outputMode == .zip
