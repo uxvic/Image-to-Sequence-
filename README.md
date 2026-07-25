@@ -58,6 +58,17 @@ needs a right-click → **Open** to get past Gatekeeper (after that, double-clic
 works normally). This build does **not** include auto-update or the app icon
 (the icon needs the Xcode build; see below).
 
+### Install it into /Applications (recommended for daily use)
+
+```bash
+./scripts/install.sh
+```
+
+Builds the app and installs it to `/Applications`, replacing any older copy and
+relaunching it. Run this again any time you pull new changes — it's the
+"update my app" command. No Gatekeeper prompt, because a locally-built app
+isn't quarantined.
+
 ### App icon
 
 The icon is generated on your Mac (no extra tools) into the asset catalog:
