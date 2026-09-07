@@ -54,7 +54,10 @@ enum FrameExporter {
             return times.isEmpty ? [lo] : times
 
         case .count:
-            let n = max(1, settings.frameCount)
+            // Clamped, not trusted: the count can be typed, so the same cap the
+            // UI enforces has to hold here too.
+            let n = min(max(ExportSettings.frameCountRange.lowerBound, settings.frameCount),
+                        ExportSettings.frameCountRange.upperBound)
             if n == 1 { return [lo + span / 2] }
             return (0..<n).map { i in lo + span * Double(i) / Double(n - 1) }
         }
@@ -161,20 +164,39 @@ enum FrameExporter {
         var coordinationError: NSError?
         var innerError: Error?
 
+        // Build the archive beside its final home first, then move it into
+        // place. A file the user chose to replace therefore survives a failure
+        // mid-copy — it is only removed once a complete archive exists.
+        let staging = destination.deletingLastPathComponent()
+            .appendingPathComponent(".\(destination.lastPathComponent).\(UUID().uuidString).part")
+
         // `.forUploading` hands back a zipped copy of the directory in a temp
         // location that is valid only for the duration of the accessor block.
         coordinator.coordinate(readingItemAt: directory, options: [.forUploading], error: &coordinationError) { zippedURL in
             do {
-                if fileManager.fileExists(atPath: destination.path) {
-                    try fileManager.removeItem(at: destination)
-                }
-                try fileManager.copyItem(at: zippedURL, to: destination)
+                try fileManager.copyItem(at: zippedURL, to: staging)
             } catch {
                 innerError = error
             }
         }
 
-        if let coordinationError { throw coordinationError }
-        if let innerError { throw innerError }
+        if let coordinationError {
+            try? fileManager.removeItem(at: staging)
+            throw coordinationError
+        }
+        if let innerError {
+            try? fileManager.removeItem(at: staging)
+            throw innerError
+        }
+
+        do {
+            if fileManager.fileExists(atPath: destination.path) {
+                try fileManager.removeItem(at: destination)
+            }
+            try fileManager.moveItem(at: staging, to: destination)
+        } catch {
+            try? fileManager.removeItem(at: staging)
+            throw error
+        }
     }
 }

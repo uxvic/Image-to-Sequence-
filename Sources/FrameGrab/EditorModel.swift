@@ -32,6 +32,12 @@ final class EditorModel: ObservableObject {
 
     // Export settings + state
     @Published var settings = ExportSettings()
+    /// What the user typed into the export **Name** field. Empty means "use the
+    /// video's own name" — the field shows that fallback as its placeholder.
+    /// Deliberately kept out of `ExportSettings`, which drives the frame-timing
+    /// pipeline: renaming an export must never rebuild the preview or discard
+    /// hand-picked frame exclusions.
+    @Published var exportName: String = ""
     @Published private(set) var isExporting = false
     @Published private(set) var exportProgress: Double = 0
 
@@ -104,6 +110,19 @@ final class EditorModel: ObservableObject {
 
     /// True when the planned set is larger than the preview grid can show.
     var previewIsTruncated: Bool { plannedTimes.count > Self.maxPreviewFrames }
+
+    /// The name used when the user hasn't typed one: `<video>_frames`.
+    var defaultExportName: String {
+        guard let stem = videoURL?.deletingPathExtension().lastPathComponent,
+              !stem.isEmpty else { return "frames" }
+        return "\(stem)_frames"
+    }
+
+    /// The name the export will actually use — the typed one, made safe for the
+    /// file system, or the default when the field is blank.
+    var resolvedExportName: String {
+        ExportNaming.sanitize(exportName, fallback: defaultExportName)
+    }
 
     // MARK: - Frame preview
 
@@ -269,6 +288,8 @@ final class EditorModel: ObservableObject {
         selectionStart = 0
         selectionEnd = meta.duration
         currentTime = 0
+        // Clear the typed name so the field re-derives from the new video.
+        exportName = ""
         thumbnails = []
         previewFrames = []
         excludedFrameIDs = []
@@ -329,16 +350,25 @@ final class EditorModel: ObservableObject {
             return
         }
 
-        let stem = videoURL?.deletingPathExtension().lastPathComponent ?? "frames"
+        let name = resolvedExportName
+        let fileManager = FileManager.default
         let destination: URL
+        // Only output this export created may be deleted if it fails part-way —
+        // never a folder or archive that was already sitting there.
+        let cleanUpOnFailure: Bool
 
         if settings.outputMode == .zip {
             let panel = NSSavePanel()
             panel.allowedContentTypes = [.zip]
-            panel.nameFieldStringValue = "\(stem)_frames.zip"
+            // Prefilled from the Name field; whatever the user types in the save
+            // dialog still wins.
+            panel.nameFieldStringValue = "\(name).zip"
             panel.canCreateDirectories = true
             guard panel.runModal() == .OK, let url = panel.url else { return }
             destination = url
+            // The panel already asked before replacing an existing archive, so
+            // that file is the user's to lose — but only to a finished export.
+            cleanUpOnFailure = !fileManager.fileExists(atPath: url.path)
         } else {
             let panel = NSOpenPanel()
             panel.canChooseFiles = false
@@ -347,7 +377,10 @@ final class EditorModel: ObservableObject {
             panel.allowsMultipleSelection = false
             panel.prompt = "Choose Folder"
             guard panel.runModal() == .OK, let dir = panel.url else { return }
-            destination = dir.appendingPathComponent("\(stem)_frames", isDirectory: true)
+            // Always a folder that doesn't exist yet, so frames are never mixed
+            // into someone else's folder and cleanup can't delete their files.
+            destination = ExportNaming.uniqueFolderURL(in: dir, name: name)
+            cleanUpOnFailure = true
         }
 
         isExporting = true
@@ -373,13 +406,13 @@ final class EditorModel: ObservableObject {
                     NSWorkspace.shared.activateFileViewerSelecting([destination])
                 }
             } catch is CancellationError {
-                try? FileManager.default.removeItem(at: destination)
+                if cleanUpOnFailure { try? fileManager.removeItem(at: destination) }
                 await MainActor.run {
                     self.isExporting = false
                     self.exportProgress = 0
                 }
             } catch {
-                try? FileManager.default.removeItem(at: destination)
+                if cleanUpOnFailure { try? fileManager.removeItem(at: destination) }
                 await MainActor.run {
                     self.isExporting = false
                     self.exportProgress = 0

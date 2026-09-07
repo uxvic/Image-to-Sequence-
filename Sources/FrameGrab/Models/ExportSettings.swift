@@ -59,6 +59,16 @@ enum ScaleOption: String, CaseIterable, Identifiable {
 /// All user-tunable export options. A plain value type so it is trivial to copy
 /// into a background export request.
 struct ExportSettings: Equatable {
+
+    /// Bounds for the frame **Count**, whether it is typed, stepped or picked
+    /// from a preset. The upper bound doubles as the exporter's hard cap, so a
+    /// mistyped `999999` can't queue an export that never finishes.
+    static let frameCountRange = 1...2000
+
+    /// Bounds for the capture **Rate**, in frames per second. The typed field
+    /// and the slider share this range so the two can never disagree.
+    static let fpsRange = 0.5...30.0
+
     var mode: SelectionMode = .count
     var fps: Double = 2
     var frameCount: Int = 12

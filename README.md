@@ -17,10 +17,13 @@ care about, and export it as frames you can paste into a chat or study yourself.
 - **Preview + scrub** with a clean player (no clutter controls).
 - **Timeline with a draggable in/out region** over a thumbnail filmstrip.
 - **Pick frames two ways:** a fixed **FPS** rate, or an exact **count** of
-  evenly-spaced frames.
+  evenly-spaced frames. Both are **typable** — use the presets and the stepper,
+  or click the field and enter any number (1–2000 frames, 0.5–30 fps).
 - **PNG or JPG** (with quality), optional **downscale** (≤1280 / 960 / 640px).
 - **Live estimate** of how many images you'll get, with a gentle nudge when you
   exceed the ~20-image sweet spot for LLMs.
+- **Name the export** yourself — the **Name** field sets the `.zip` filename or
+  the folder name (it defaults to the video's own name).
 - **Export as a `.zip`** (default) or as loose files in a folder; the result is
   revealed in Finder when done. Export shows progress and can be cancelled.
 
@@ -103,15 +106,26 @@ one-time Gatekeeper bypass) is in **[DISTRIBUTION.md](DISTRIBUTION.md)**.
 2. Scrub to find the moment you want. Click the timeline to move the playhead.
 3. Drag the two green handles to set the in/out region — or move the playhead
    and click **Set In** / **Set Out**. **Reset** selects the whole clip.
-4. In the right panel choose **FPS** or **Count**, the format/scale, and ZIP or
-   folder output. Watch the **≈ N images** estimate.
-5. Click **Export** and pick where to save. The frames appear in Finder when
+4. In the right panel choose **FPS** or **Count**. Tap a preset, use the
+   stepper/slider, or click into the number and type an exact value (press
+   **Return** to apply). Pick the format/scale, and ZIP or folder output. Watch
+   the **≈ N images** estimate.
+5. Type a **Name** for the export if you want one — leave it blank to use the
+   video's name. The caption underneath shows exactly what will be created.
+6. Click **Export** and pick where to save. The frames appear in Finder when
    done.
 
-Frames are named `frame_0001.<ext>`, `frame_0002.<ext>`, … in order.
+Frames are named `frame_0001.<ext>`, `frame_0002.<ext>`, … in order, inside a
+`.zip` or folder named after the **Name** field. A folder export never writes
+into an existing folder — if the name is taken you get `My name 2`, `My name 3`,
+and so on, so nothing of yours is overwritten.
 
 ## Notes & limitations
 
+- **macOS only.** This is a native SwiftUI/AVFoundation app — there is no
+  Windows or Linux build, and the code can't be cross-compiled as-is (see
+  [Requirements](#requirements)). A Windows version would mean a separate
+  implementation on a cross-platform stack.
 - **`.webm` isn't supported** — macOS/AVFoundation can't read it. Convert to
   `.mp4`/`.mov` first (e.g. `ffmpeg -i in.webm out.mp4`).
 - The app is **not sandboxed** (it's a personal local tool) and **not notarized**.
@@ -134,7 +148,8 @@ Sources/FrameGrab/
   FrameGrabApp.swift               App entry + menu commands (+ updater, Help link)
   Updater.swift                    Sparkle "Check for Updates" (compiled w/ Sparkle)
   EditorModel.swift                State: player, selection, settings, export
-  Models/ExportSettings.swift      Frame/format/scale/output options
+  Models/ExportSettings.swift      Frame/format/scale/output options + limits
+  Models/ExportNaming.swift        Export-name sanitising + non-colliding folders
   Services/VideoLoader.swift       Async metadata + timeline thumbnails
   Services/FrameExporter.swift     Frame extraction + zipping
   Views/ContentView.swift          Layout, empty state, drag & drop
