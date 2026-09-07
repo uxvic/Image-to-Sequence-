@@ -40,14 +40,44 @@ impl Default for ExtractOptions {
     }
 }
 
-/// A clip's display geometry and length, as reported by ffprobe.
+/// A clip's display geometry, length and nominal rate, as reported by ffprobe.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct VideoInfo {
     pub duration: f64,
     /// Width **after** any rotation metadata is applied, so it matches what the
     /// player and the extracted frames actually show.
     pub width: u32,
     pub height: u32,
+    /// Nominal frames per second. Only used to work out where the last
+    /// decodable frame is; a missing or nonsense value falls back to 30.
+    #[serde(default = "default_frame_rate")]
+    pub frame_rate: f64,
+}
+
+fn default_frame_rate() -> f64 {
+    30.0
+}
+
+impl VideoInfo {
+    /// The latest timestamp that still has a frame behind it.
+    ///
+    /// A clip's last frame *starts* one frame-length before the clip ends, and
+    /// ffmpeg's accurate seek returns the first frame at or after the time
+    /// asked for — so asking for anything past that start point decodes
+    /// nothing at all and the export fails on its final frame. Backing off by
+    /// one frame (plus a hair, against floating-point drift) lands on it.
+    pub fn last_decodable_time(&self) -> f64 {
+        if !self.duration.is_finite() || self.duration <= 0.0 {
+            return 0.0;
+        }
+        let rate = if self.frame_rate.is_finite() && self.frame_rate >= 1.0 {
+            self.frame_rate
+        } else {
+            default_frame_rate()
+        };
+        (self.duration - 1.0 / rate - 1e-4).max(0.0)
+    }
 }
 
 pub fn probe_args(input: &str) -> Vec<String> {
@@ -88,7 +118,23 @@ pub fn parse_probe(json: &str) -> Result<VideoInfo, String> {
         .filter(|d| d.is_finite() && *d > 0.0)
         .ok_or_else(|| "Couldn't work out how long that video is.".to_string())?;
 
-    Ok(VideoInfo { duration, width, height })
+    let frame_rate = read_rational(stream, "avg_frame_rate")
+        .or_else(|| read_rational(stream, "r_frame_rate"))
+        .filter(|r| r.is_finite() && *r >= 1.0)
+        .unwrap_or_else(default_frame_rate);
+
+    Ok(VideoInfo { duration, width, height, frame_rate })
+}
+
+/// ffprobe reports rates as `"30/1"` — and as `"0/0"` when it doesn't know.
+fn read_rational(stream: &serde_json::Value, key: &str) -> Option<f64> {
+    let text = stream.get(key)?.as_str()?;
+    let (num, den) = text.split_once('/')?;
+    let den: f64 = den.parse().ok()?;
+    if den == 0.0 {
+        return None;
+    }
+    Some(num.parse::<f64>().ok()? / den)
 }
 
 fn read_duration(node: Option<&serde_json::Value>) -> Option<f64> {
@@ -228,7 +274,7 @@ mod tests {
     use super::*;
 
     fn landscape() -> VideoInfo {
-        VideoInfo { duration: 10.0, width: 1920, height: 1080 }
+        VideoInfo { duration: 10.0, width: 1920, height: 1080, frame_rate: 30.0 }
     }
 
     #[test]
@@ -295,7 +341,7 @@ mod tests {
 
     #[test]
     fn scaling_never_upscales() {
-        let small = VideoInfo { duration: 1.0, width: 640, height: 360 };
+        let small = VideoInfo { duration: 1.0, width: 640, height: 360, frame_rate: 30.0 };
         assert_eq!(scaled_size(small, Some(1280)), None);
         assert_eq!(scaled_size(small, Some(640)), None);
         assert_eq!(scaled_size(landscape(), None), None);
@@ -304,7 +350,7 @@ mod tests {
     #[test]
     fn scaling_keeps_the_aspect_ratio_on_even_pixels() {
         assert_eq!(scaled_size(landscape(), Some(1280)), Some((1280, 720)));
-        let portrait = VideoInfo { duration: 1.0, width: 1080, height: 1920 };
+        let portrait = VideoInfo { duration: 1.0, width: 1080, height: 1920, frame_rate: 30.0 };
         let (w, h) = scaled_size(portrait, Some(640)).unwrap();
         assert_eq!(w, 640);
         assert_eq!(h % 2, 0);
@@ -366,6 +412,40 @@ mod tests {
     }
 
     #[test]
+    fn the_frame_rate_is_read_and_falls_back_sensibly() {
+        let json = r#"{"streams":[{"width":8,"height":8,"avg_frame_rate":"30000/1001"}],"format":{"duration":"5"}}"#;
+        assert!((parse_probe(json).unwrap().frame_rate - 29.97).abs() < 0.01);
+
+        // "0/0" means ffprobe doesn't know — fall through to r_frame_rate.
+        let json = r#"{"streams":[{"width":8,"height":8,"avg_frame_rate":"0/0","r_frame_rate":"25/1"}],"format":{"duration":"5"}}"#;
+        assert_eq!(parse_probe(json).unwrap().frame_rate, 25.0);
+
+        // Neither is present — a safe default rather than a divide by zero.
+        let json = r#"{"streams":[{"width":8,"height":8}],"format":{"duration":"5"}}"#;
+        assert_eq!(parse_probe(json).unwrap().frame_rate, 30.0);
+    }
+
+    #[test]
+    fn the_last_decodable_time_lands_on_the_final_frame_not_past_it() {
+        // A 2s clip at 10fps has its last frame at 1.9s.
+        let info = VideoInfo { duration: 2.0, width: 8, height: 8, frame_rate: 10.0 };
+        let t = info.last_decodable_time();
+        assert!(t < 1.9, "must not ask for a time past the last frame's start");
+        assert!(t > 1.8, "but must still land inside the last frame");
+
+        // Degenerate inputs stay in range instead of going negative.
+        for info in [
+            VideoInfo { duration: 0.0, width: 8, height: 8, frame_rate: 30.0 },
+            VideoInfo { duration: 0.01, width: 8, height: 8, frame_rate: 30.0 },
+            VideoInfo { duration: 5.0, width: 8, height: 8, frame_rate: 0.0 },
+            VideoInfo { duration: f64::NAN, width: 8, height: 8, frame_rate: 30.0 },
+        ] {
+            let t = info.last_decodable_time();
+            assert!(t >= 0.0 && t.is_finite(), "{info:?} -> {t}");
+        }
+    }
+
+    #[test]
     fn options_deserialise_from_the_shape_the_ui_sends() {
         // The window sends camelCase JSON; if these names drift, quality and
         // downscaling silently stop working rather than failing loudly.
@@ -386,7 +466,7 @@ mod tests {
 
     #[test]
     fn video_info_round_trips_through_the_window() {
-        let info = VideoInfo { duration: 12.5, width: 1920, height: 1080 };
+        let info = VideoInfo { duration: 12.5, width: 1920, height: 1080, frame_rate: 25.0 };
         let json = serde_json::to_string(&info).unwrap();
         assert_eq!(serde_json::from_str::<VideoInfo>(&json).unwrap(), info);
     }

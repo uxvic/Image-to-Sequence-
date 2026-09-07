@@ -242,7 +242,9 @@ async function startExport() {
         name,
       },
     })
-    if (!outcome.cancelled) await invoke('reveal', { path: outcome.path })
+    // Showing the result is a nicety on top of a finished export — a machine
+    // with no file manager to open must not turn success into an error.
+    if (!outcome.cancelled) await invoke('reveal', { path: outcome.path }).catch(() => {})
   } catch (error) {
     showError('The export didn’t finish', String(error))
   } finally {
@@ -275,6 +277,9 @@ function renderTransport() {
   el.current_time.textContent = formatTimecode(state.currentTime)
   el.duration.textContent = formatTimecode(state.info?.duration ?? 0)
   el.play.textContent = el.video.paused ? 'Play' : 'Pause'
+  // Nothing to play when the webview can't decode the file — the fallback
+  // stills are scrubbed with the timeline instead.
+  el.play.disabled = !hasVideo() || !state.canPlayInline
   el.video.hidden = !state.canPlayInline
   el.video_fallback.hidden = state.canPlayInline
 }

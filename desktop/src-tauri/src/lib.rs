@@ -10,7 +10,7 @@ mod tools;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use base64::Engine;
@@ -27,6 +27,12 @@ pub const MISSING_FFMPEG: &str =
     "FrameGrab needs ffmpeg to read video. Install it (macOS: `brew install ffmpeg`, \
      Windows: `winget install Gyan.FFmpeg`), or put ffmpeg and ffprobe next to the app, \
      then reopen FrameGrab.";
+
+/// Names each thumbnail run's scratch directory. It must be unique across
+/// *every* run, not just within a channel: the filmstrip and a fallback still
+/// are rendered at the same time, and sharing a directory means one finishing
+/// deletes the other's frames out from under it.
+static SCRATCH_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Default)]
 struct AppState {
@@ -111,7 +117,10 @@ fn render_thumbnails(
 
     std::thread::spawn(move || {
         let Some(tools) = Tools::locate() else { return };
-        let scratch = std::env::temp_dir().join(format!("framegrab-thumbs-{token}"));
+        let run = SCRATCH_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        // Built from a counter rather than from `channel`, which is caller
+        // input and has no business shaping a path this code later deletes.
+        let scratch = std::env::temp_dir().join(format!("framegrab-thumbs-{}-{run}", std::process::id()));
         if std::fs::create_dir_all(&scratch).is_err() {
             return;
         }
