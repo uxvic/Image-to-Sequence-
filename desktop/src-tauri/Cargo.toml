@@ -1,0 +1,33 @@
+# Its own workspace, separate from ../core: the core crate must stay buildable
+# on machines without the GTK/WebKit development headers this shell needs.
+[workspace]
+
+[package]
+name = "framegrab"
+version = "0.1.0"
+edition = "2021"
+description = "Turn a slice of a video into an image sequence"
+default-run = "framegrab"
+
+[lib]
+name = "framegrab_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+framegrab-core = { path = "../core" }
+tauri = { version = "2", features = ["protocol-asset"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

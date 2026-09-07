@@ -1,0 +1,19 @@
+{
+  "name": "framegrab-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "FrameGrab for Windows, macOS and Linux",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri",
+    "icon": "node scripts/make_icon.mjs",
+    "test": "npm run test:js && npm run test:rust",
+    "test:js": "node --test tests/*.test.mjs",
+    "test:rust": "cargo test --manifest-path core/Cargo.toml"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

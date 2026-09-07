@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "What the FrameGrab window is allowed to do: pick a video, choose where the export goes, and show the result in the file manager.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "dialog:allow-message",
+    "opener:allow-reveal-item-in-dir"
+  ]
+}

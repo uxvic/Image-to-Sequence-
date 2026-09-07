@@ -1,0 +1,14 @@
+# Its own workspace on purpose: the platform-independent half of FrameGrab has
+# no Tauri (and therefore no WebKit/GTK) dependency, so `cargo test` here runs
+# anywhere — including CI containers that can't build the desktop shell.
+[workspace]
+
+[package]
+name = "framegrab-core"
+version = "0.1.0"
+edition = "2021"
+description = "Frame maths, export naming and ffmpeg command building for FrameGrab"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

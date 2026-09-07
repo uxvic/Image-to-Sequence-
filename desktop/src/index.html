@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FrameGrab</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="setup-banner" class="banner" hidden>
+      <span id="setup-message"></span>
+      <button id="setup-recheck" class="ghost small">Check again</button>
+    </div>
+
+    <main class="layout">
+      <section class="stage" id="stage">
+        <!-- Before a video is loaded -->
+        <div class="empty" id="empty-state">
+          <svg viewBox="0 0 24 24" class="empty-icon" aria-hidden="true">
+            <path d="M3 6h18v12H3z" />
+            <path d="M7 6v12M17 6v12" />
+          </svg>
+          <div class="empty-copy">
+            <h1>Drop a video here</h1>
+            <p>Select a region, then export it as an image sequence</p>
+          </div>
+          <button id="open-video" class="primary large">Open Video…</button>
+          <p class="hint">MP4 · MOV · M4V · WEBM · MKV · AVI</p>
+        </div>
+
+        <!-- The player -->
+        <div class="player" id="player" hidden>
+          <div class="video-wrap">
+            <video id="video" playsinline></video>
+            <div class="video-fallback" id="video-fallback" hidden>
+              <img id="fallback-frame" alt="" />
+              <p>
+                This window can't decode that format for playback, so scrubbing
+                shows a still frame instead. Export works normally.
+              </p>
+            </div>
+          </div>
+          <div class="transport">
+            <button id="play" class="ghost" title="Play / pause (space)">Play</button>
+            <span class="timecode"><span id="current-time">0:00.00</span> / <span id="duration">0:00.00</span></span>
+            <span class="spacer"></span>
+            <button id="set-in" class="ghost small">Set In</button>
+            <button id="set-out" class="ghost small">Set Out</button>
+            <button id="reset-selection" class="ghost small">Reset</button>
+          </div>
+        </div>
+
+        <!-- The contact sheet of frames that will be exported -->
+        <div class="preview" id="preview" hidden>
+          <header class="preview-header">
+            <h2>Frame preview</h2>
+            <span id="preview-spinner" class="spinner" hidden></span>
+            <span class="spacer"></span>
+            <span id="preview-count" class="muted"></span>
+            <button id="include-all" class="ghost small" hidden>Include All</button>
+            <button id="close-preview" class="ghost small">Done</button>
+          </header>
+          <div class="preview-grid" id="preview-grid"></div>
+          <p class="warning" id="preview-truncated" hidden></p>
+        </div>
+
+        <!-- Timeline -->
+        <div class="timeline" id="timeline" hidden>
+          <div class="filmstrip" id="filmstrip"></div>
+          <div class="track" id="track">
+            <div class="selection" id="selection"></div>
+            <div class="handle handle-in" id="handle-in"></div>
+            <div class="handle handle-out" id="handle-out"></div>
+            <div class="playhead" id="playhead"></div>
+          </div>
+          <div class="track-labels">
+            <span id="label-in">0:00.00</span>
+            <span id="label-length" class="muted"></span>
+            <span id="label-out">0:00.00</span>
+          </div>
+        </div>
+      </section>
+
+      <aside class="panel" id="panel">
+        <h2 class="panel-title">Export</h2>
+
+        <section class="group">
+          <h3>Frames</h3>
+          <div class="segmented" id="mode-picker">
+            <button data-mode="fps">FPS</button>
+            <button data-mode="count" class="active">Count</button>
+          </div>
+
+          <div id="fps-controls" hidden>
+            <div class="row">
+              <label for="fps-input">Rate</label>
+              <span class="spacer"></span>
+              <input id="fps-input" class="number" type="text" inputmode="decimal" />
+              <span class="muted">fps</span>
+            </div>
+            <input id="fps-slider" type="range" min="0.5" max="30" step="0.5" />
+          </div>
+
+          <div id="count-controls">
+            <div class="row">
+              <label for="count-input">Count</label>
+              <span class="spacer"></span>
+              <input id="count-input" class="number" type="text" inputmode="numeric" />
+              <div class="stepper">
+                <button id="count-up" aria-label="One more frame">+</button>
+                <button id="count-down" aria-label="One fewer frame">−</button>
+              </div>
+            </div>
+            <div class="presets" id="presets"></div>
+            <p class="caption">Type any number from 1 to 2000.</p>
+          </div>
+
+          <div class="estimate">
+            <p class="estimate-count" id="estimate-count">0 images</p>
+            <p class="caption" id="estimate-excluded" hidden></p>
+            <p class="warning" id="estimate-warning" hidden>
+              Most LLMs accept ~20 images per message — consider fewer.
+            </p>
+            <button id="toggle-preview" class="ghost wide">Preview frames</button>
+          </div>
+        </section>
+
+        <section class="group">
+          <h3>Format</h3>
+          <div class="segmented" id="format-picker">
+            <button data-format="png" class="active">PNG</button>
+            <button data-format="jpeg">JPG</button>
+          </div>
+          <div id="quality-controls" hidden>
+            <div class="row">
+              <label for="quality-slider">Quality</label>
+              <span class="spacer"></span>
+              <span id="quality-value" class="mono">90%</span>
+            </div>
+            <input id="quality-slider" type="range" min="10" max="100" step="1" value="90" />
+          </div>
+          <div class="row">
+            <label for="scale-select">Scale</label>
+            <span class="spacer"></span>
+            <select id="scale-select">
+              <option value="">Original</option>
+              <option value="1280">≤ 1280px</option>
+              <option value="960">≤ 960px</option>
+              <option value="640">≤ 640px</option>
+            </select>
+          </div>
+        </section>
+
+        <section class="group">
+          <h3>Output</h3>
+          <div class="segmented" id="output-picker">
+            <button data-output="zip" class="active">ZIP</button>
+            <button data-output="folder">Folder</button>
+          </div>
+          <div class="row">
+            <label for="name-input">Name</label>
+            <input id="name-input" class="text" type="text" spellcheck="false" />
+          </div>
+          <p class="caption" id="output-caption"></p>
+        </section>
+
+        <div class="spacer"></div>
+
+        <section class="group export-actions">
+          <div id="export-progress" hidden>
+            <progress id="progress-bar" max="1" value="0"></progress>
+            <div class="row">
+              <span class="mono" id="progress-label">0%</span>
+              <span class="spacer"></span>
+              <button id="cancel-export" class="ghost small">Cancel</button>
+            </div>
+          </div>
+          <button id="export" class="primary large wide">Nothing to export</button>
+        </section>
+      </aside>
+    </main>
+
+    <div class="drop-overlay" id="drop-overlay" hidden><span>Drop to open</span></div>
+
+    <dialog id="error-dialog">
+      <h2 id="error-title">Something went wrong</h2>
+      <p id="error-message"></p>
+      <form method="dialog"><button class="primary">OK</button></form>
+    </dialog>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

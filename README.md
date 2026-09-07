@@ -29,6 +29,21 @@ care about, and export it as frames you can paste into a chat or study yourself.
 
 Everything runs **100% locally** — no video ever leaves your Mac.
 
+## Two builds
+
+| | This app (`Sources/`) | [`desktop/`](desktop/README.md) |
+|---|---|---|
+| Platforms | macOS 13+ | **Windows**, macOS, Linux |
+| Built with | SwiftUI + AVFoundation | Tauri (Rust + web) |
+| Decoding | AVFoundation | ffmpeg |
+| `.webm` / `.mkv` | Not supported | **Supported** |
+| Auto-update | Sparkle | Not yet |
+
+Both have the same editor and the same export options. The Swift app is the
+more native-feeling Mac build and updates itself; the Tauri one is what runs on
+Windows. Everything below describes the Swift app — for the cross-platform one,
+see **[desktop/README.md](desktop/README.md)**.
+
 ## Requirements
 
 - macOS **13.0 (Ventura)** or newer.
@@ -122,10 +137,10 @@ and so on, so nothing of yours is overwritten.
 
 ## Notes & limitations
 
-- **macOS only.** This is a native SwiftUI/AVFoundation app — there is no
-  Windows or Linux build, and the code can't be cross-compiled as-is (see
-  [Requirements](#requirements)). A Windows version would mean a separate
-  implementation on a cross-platform stack.
+- **This app is macOS only.** It's native SwiftUI/AVFoundation and can't be
+  cross-compiled. For Windows (and Linux) there is a separate Tauri build in
+  [`desktop/`](desktop/README.md) with the same feature set — see
+  [Two builds](#two-builds) above.
 - **`.webm` isn't supported** — macOS/AVFoundation can't read it. Convert to
   `.mp4`/`.mov` first (e.g. `ffmpeg -i in.webm out.mp4`).
 - The app is **not sandboxed** (it's a personal local tool) and **not notarized**.
@@ -144,6 +159,7 @@ scripts/make_icon.swift            Generate the app icon (or scale Branding/icon
 scripts/make_dmg.sh                App → styled drag-to-Applications DMG
 scripts/release.sh                 Build + DMG + signed appcast → GitHub release
 DISTRIBUTION.md                    Full DMG + auto-update setup guide
+desktop/                           Cross-platform (Windows/macOS/Linux) Tauri build
 Sources/FrameGrab/
   FrameGrabApp.swift               App entry + menu commands (+ updater, Help link)
   Updater.swift                    Sparkle "Check for Updates" (compiled w/ Sparkle)
@@ -163,5 +179,6 @@ Sources/FrameGrab/
 
 - Contact-sheet / grid export and copy-to-clipboard (paste one image into a chat).
 - Multiple saved regions.
-- `.webm` support (would require bundling ffmpeg).
+- `.webm` support (the `desktop/` build already has it, via ffmpeg).
 - Developer ID signing + notarization (zero-warning install for anyone).
+- Auto-update and a signed installer for the `desktop/` build.
