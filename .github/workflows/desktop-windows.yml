@@ -1,0 +1,164 @@
+# Builds the FrameGrab Windows installer on a real Windows machine.
+#
+# Every test runs there first — including the export tests, which drive real
+# ffmpeg processes and so exercise the Windows-only code (no-console process
+# spawning, drive-letter paths, same-volume renames). The installer it produces
+# is then installed silently and launched, so a green run means "installs and
+# opens on Windows", not just "compiles".
+#
+# The installer is attached to each run as the `FrameGrab-Windows-installer`
+# artifact.
+name: Desktop app (Windows)
+
+on:
+  push:
+    paths:
+      - "desktop/**"
+      - ".github/workflows/desktop-windows.yml"
+  pull_request:
+    paths:
+      - "desktop/**"
+      - ".github/workflows/desktop-windows.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Test, build and launch on Windows
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: desktop
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            desktop/core -> target
+            desktop/src-tauri -> target
+
+      # An LGPL build, so it can be redistributed inside the installer with
+      # just its licence alongside.
+      - name: Fetch ffmpeg to bundle
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $zip = Join-Path $env:RUNNER_TEMP 'ffmpeg.zip'
+          $out = Join-Path $env:RUNNER_TEMP 'ffmpeg'
+          Invoke-WebRequest -Uri 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip' -OutFile $zip
+          Expand-Archive $zip -DestinationPath $out
+
+          $exe = Get-ChildItem $out -Recurse -Filter 'ffmpeg.exe' | Select-Object -First 1
+          if (-not $exe) { throw 'The ffmpeg archive has no ffmpeg.exe' }
+          $licence = Get-ChildItem $out -Recurse -Filter 'LICENSE*' | Select-Object -First 1
+          if (-not $licence) { throw 'The ffmpeg archive has no licence file' }
+          $bin = $exe.DirectoryName
+
+          New-Item -ItemType Directory -Force src-tauri/binaries | Out-Null
+          Copy-Item (Join-Path $bin 'ffmpeg.exe')  src-tauri/binaries/ffmpeg-x86_64-pc-windows-msvc.exe
+          Copy-Item (Join-Path $bin 'ffprobe.exe') src-tauri/binaries/ffprobe-x86_64-pc-windows-msvc.exe
+          Copy-Item $licence.FullName src-tauri/binaries/FFMPEG-LICENSE.txt
+          & (Join-Path $bin 'ffmpeg.exe') -hide_banner -version | Select-Object -First 1
+
+          # The tests find ffmpeg through the app's own override variable, so
+          # that lookup gets exercised on Windows too.
+          "FRAMEGRAB_FFMPEG_DIR=$bin" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: JavaScript tests
+        run: npm run test:js
+
+      - name: Core tests
+        run: cargo test --manifest-path core/Cargo.toml
+
+      - name: App and export tests (real ffmpeg)
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+        env:
+          # Fail, rather than skip, if ffmpeg somehow isn't there.
+          FRAMEGRAB_REQUIRE_FFMPEG: "1"
+
+      - name: Build the installer, ffmpeg included
+        run: npx tauri build --config src-tauri/tauri.bundle-ffmpeg.json
+
+      - name: Install it and check the app opens
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setup = Get-ChildItem src-tauri/target/release/bundle/nsis -Filter '*-setup.exe' | Select-Object -First 1
+          if (-not $setup) { throw 'No installer was produced' }
+          Write-Host "Installer: $($setup.Name) ($([math]::Round($setup.Length / 1MB, 1)) MB)"
+
+          # Exactly what a double-click would do, minus the clicks.
+          Start-Process $setup.FullName -ArgumentList '/S' -Wait
+
+          $dir = @(
+            (Join-Path $env:LOCALAPPDATA 'FrameGrab'),
+            (Join-Path $env:LOCALAPPDATA 'Programs\FrameGrab')
+          ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $dir) { throw 'Could not find where FrameGrab was installed' }
+          Write-Host "Installed to $dir"
+          Get-ChildItem $dir | Format-Table Name, Length -AutoSize | Out-String | Write-Host
+
+          foreach ($tool in 'ffmpeg.exe', 'ffprobe.exe', 'FFMPEG-LICENSE.txt') {
+            if (-not (Test-Path (Join-Path $dir $tool))) { throw "$tool was not installed beside the app" }
+          }
+
+          # Launch it the way a user would: no override pointing at ffmpeg, so
+          # the app has to find the copies installed next to it.
+          Remove-Item Env:FRAMEGRAB_FFMPEG_DIR -ErrorAction SilentlyContinue
+          $app = Get-ChildItem $dir -Filter '*.exe' |
+            Where-Object { $_.Name -notmatch '^(ffmpeg|ffprobe|uninstall)' } |
+            Select-Object -First 1
+          $proc = Start-Process $app.FullName -PassThru
+          Start-Sleep -Seconds 15
+          $proc.Refresh()
+          if ($proc.HasExited) { throw "FrameGrab quit on launch (exit code $($proc.ExitCode))" }
+          Write-Host "Running: '$($proc.MainWindowTitle)' (pid $($proc.Id))"
+          if ($proc.MainWindowTitle -ne 'FrameGrab') { throw "Expected a 'FrameGrab' window, saw '$($proc.MainWindowTitle)'" }
+
+          # The screenshot is a courtesy for whoever reads the run; the window
+          # check above is the actual test, so a capture failure isn't fatal.
+          try {
+            Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+            $bounds = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $shot = New-Object System.Drawing.Bitmap $bounds.Width, $bounds.Height
+            [System.Drawing.Graphics]::FromImage($shot).CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size)
+            $shot.Save((Join-Path $PWD 'framegrab-windows.png'))
+          } catch {
+            Write-Warning "Couldn't capture the screen: $_"
+          }
+
+          Stop-Process -Id $proc.Id
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: FrameGrab-Windows-installer
+          path: desktop/src-tauri/target/release/bundle/nsis/*-setup.exe
+          if-no-files-found: error
+
+      - name: Upload a screenshot of it running
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FrameGrab-Windows-screenshot
+          path: desktop/framegrab-windows.png
+          if-no-files-found: ignore

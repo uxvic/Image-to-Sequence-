@@ -8,10 +8,11 @@
     "dev": "tauri dev",
     "build": "tauri build",
     "tauri": "tauri",
-    "icon": "node scripts/make_icon.mjs",
+    "icon": "node scripts/make_icon.mjs && tauri icon src-tauri/icons/icon.png && node scripts/make_icon.mjs --prune",
     "test": "npm run test:js && npm run test:rust",
-    "test:js": "node --test tests/*.test.mjs",
-    "test:rust": "cargo test --manifest-path core/Cargo.toml"
+    "test:js": "node --test tests/frames.test.mjs",
+    "test:rust": "cargo test --manifest-path core/Cargo.toml",
+    "build:windows": "tauri build --config src-tauri/tauri.bundle-ffmpeg.json"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

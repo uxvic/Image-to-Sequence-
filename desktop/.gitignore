@@ -2,3 +2,5 @@ node_modules/
 target/
 src-tauri/gen/
 dist/
+# ffmpeg is fetched at build time for the bundled installer, never committed
+src-tauri/binaries/

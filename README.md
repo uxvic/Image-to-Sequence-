@@ -44,6 +44,12 @@ more native-feeling Mac build and updates itself; the Tauri one is what runs on
 Windows. Everything below describes the Swift app — for the cross-platform one,
 see **[desktop/README.md](desktop/README.md)**.
 
+**On Windows?** You don't need to build anything: download the installer from
+this repository's **Actions** tab → **Desktop app (Windows)** → newest green run
+→ **FrameGrab-Windows-installer**. ffmpeg is included. Full steps, including
+the one-time SmartScreen prompt, are in
+[desktop/README.md](desktop/README.md#get-it-on-windows).
+
 ## Requirements
 
 - macOS **13.0 (Ventura)** or newer.

@@ -2,10 +2,14 @@
 //
 // It is deliberately simple: a dark rounded square (the app's canvas colour)
 // with sprocket holes down both edges and a green play triangle, which reads
-// at 32px as well as at 1024px. Run it with `npm run icon`; pass a size to get
-// a single file, or nothing to write the whole set.
+// at 32px as well as at 1024px.
+//
+// `npm run icon` is the way to use it: it draws the 1024px master here, has
+// `tauri icon` derive every platform format from it (including the .ico that a
+// Windows build refuses to compile without), then calls back with `--prune`
+// to drop the mobile and Store variants a desktop app doesn't ship.
 import { deflateSync } from 'node:zlib'
-import { writeFileSync, mkdirSync } from 'node:fs'
+import { writeFileSync, mkdirSync, rmSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -121,10 +125,14 @@ function crc32(buffer) {
   return (c ^ 0xffffffff) >>> 0
 }
 
-mkdirSync(ICONS, { recursive: true })
-const requested = process.argv[2] ? [Number(process.argv[2])] : [32, 128, 256, 512, 1024]
-for (const size of requested) {
-  const name = size === 1024 ? 'icon.png' : `${size}x${size}.png`
-  writeFileSync(join(ICONS, name), render(size))
-  console.log(`icons/${name}`)
+if (process.argv[2] === '--prune') {
+  for (const entry of readdirSync(ICONS)) {
+    if (['android', 'ios'].includes(entry) || /^Square\d+x\d+Logo\.png$|^StoreLogo\.png$/.test(entry)) {
+      rmSync(join(ICONS, entry), { recursive: true, force: true })
+    }
+  }
+} else {
+  mkdirSync(ICONS, { recursive: true })
+  writeFileSync(join(ICONS, 'icon.png'), render(1024))
+  console.log('icons/icon.png')
 }

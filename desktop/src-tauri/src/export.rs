@@ -253,9 +253,15 @@ mod tests {
     }
 
     /// Synthesises a two-second clip. Returns `None` when ffmpeg isn't
-    /// installed, so these tests skip rather than fail on a bare machine.
+    /// installed, so these tests skip rather than fail on a bare machine —
+    /// unless `FRAMEGRAB_REQUIRE_FFMPEG` is set, as CI does, where a skip
+    /// would quietly pass a run that tested nothing.
     fn make_clip(dir: &Path) -> Option<(String, VideoInfo)> {
-        let tools = Tools::locate()?;
+        let required = std::env::var_os("FRAMEGRAB_REQUIRE_FFMPEG").is_some();
+        let Some(tools) = Tools::locate() else {
+            assert!(!required, "FRAMEGRAB_REQUIRE_FFMPEG is set but ffmpeg/ffprobe weren't found");
+            return None;
+        };
         let path = dir.join("clip.mp4");
         let ok = command(&tools.ffmpeg)
             .args([
@@ -264,9 +270,10 @@ mod tests {
             ])
             .arg(&path)
             .status()
-            .ok()?
-            .success();
+            .map(|status| status.success())
+            .unwrap_or(false);
         if !ok {
+            assert!(!required, "FRAMEGRAB_REQUIRE_FFMPEG is set but ffmpeg couldn't make a test clip");
             return None;
         }
         Some((
